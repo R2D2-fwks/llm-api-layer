@@ -1,0 +1,673 @@
+openapi: 3.0.3
+info:
+  title: LLM API Layer
+  description: |
+    A secure, multi-tenant API server built with Hapi.js framework and TypeScript, 
+    featuring JWT authentication and Redis for data persistence.
+    
+    ## Authentication
+    Most endpoints require JWT authentication. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your-jwt-token>
+    ```
+    
+    ## Multi-Tenant Architecture
+    - Each tenant has isolated data
+    - Users belong to specific tenants
+    - Authentication is scoped to tenant context
+  version: 1.0.0
+  contact:
+    name: Kartikeya Sharma
+  license:
+    name: ISC
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Server health and status endpoints
+  - name: Authentication
+    description: User authentication and registration
+  - name: Users
+    description: User management (admin only)
+
+paths:
+  /:
+    get:
+      tags:
+        - Health
+      summary: Get API information
+      description: Returns basic API information and available endpoints
+      operationId: getApiInfo
+      responses:
+        '200':
+          description: API information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: LLM API Layer
+                  version:
+                    type: string
+                    example: 1.0.0
+                  description:
+                    type: string
+                    example: Multi-tenant API layer with authentication
+                  endpoints:
+                    type: object
+                    properties:
+                      health:
+                        type: string
+                        example: /health
+                      auth:
+                        type: object
+                        properties:
+                          register:
+                            type: string
+                            example: POST /api/auth/register
+                          login:
+                            type: string
+                            example: POST /api/auth/login
+                          logout:
+                            type: string
+                            example: POST /api/auth/logout
+                          me:
+                            type: string
+                            example: GET /api/auth/me
+                      users:
+                        type: object
+                        properties:
+                          create:
+                            type: string
+                            example: POST /api/users (admin only)
+                          list:
+                            type: string
+                            example: GET /api/users (admin only)
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check server and Redis connection health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: 2024-01-01T00:00:00.000Z
+                  services:
+                    type: object
+                    properties:
+                      redis:
+                        type: string
+                        example: connected
+                      server:
+                        type: string
+                        example: running
+        '503':
+          description: Server is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [unhealthy]
+                    example: unhealthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  error:
+                    type: string
+                    example: Redis connection failed
+
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new tenant
+      description: Create a new tenant with an admin user
+      operationId: registerTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPayload'
+      responses:
+        '201':
+          description: Tenant and admin user created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Tenant and admin user created successfully
+                  tenant:
+                    $ref: '#/components/schemas/TenantInfo'
+                  user:
+                    $ref: '#/components/schemas/UserWithoutPassword'
+                  token:
+                    type: string
+                    description: JWT authentication token
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Tenant with this domain already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 409
+                error: Conflict
+                message: Tenant with this domain already exists
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT token. Requires either tenantId or domain.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginPayload'
+            examples:
+              loginWithDomain:
+                summary: Login with domain
+                value:
+                  email: admin@acme.com
+                  password: SecurePass123
+                  domain: acme.com
+              loginWithTenantId:
+                summary: Login with tenant ID
+                value:
+                  email: admin@acme.com
+                  password: SecurePass123
+                  tenantId: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Login successful
+                  token:
+                    type: string
+                    description: JWT authentication token
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/UserWithoutPassword'
+                  tenant:
+                    $ref: '#/components/schemas/TenantInfo'
+                  sessionId:
+                    type: string
+                    format: uuid
+                    example: 123e4567-e89b-12d3-a456-426614174000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 401
+                error: Unauthorized
+                message: Invalid credentials
+        '403':
+          description: Account is not active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                inactiveTenant:
+                  summary: Tenant is not active
+                  value:
+                    statusCode: 403
+                    error: Forbidden
+                    message: Tenant is not active
+                inactiveUser:
+                  summary: User account is not active
+                  value:
+                    statusCode: 403
+                    error: Forbidden
+                    message: User account is not active
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 404
+                error: Not Found
+                message: Tenant not found
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate JWT token by adding it to blacklist
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logout successful
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Retrieve information about the currently authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserWithoutPassword'
+                  tenant:
+                    $ref: '#/components/schemas/TenantInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/users:
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      description: Create a new user in the tenant (admin only)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserPayload'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User created successfully
+                  user:
+                    $ref: '#/components/schemas/UserWithoutPassword'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: User with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 409
+                error: Conflict
+                message: User with this email already exists in tenant
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags:
+        - Users
+      summary: List all users
+      description: Get all users in the tenant (admin only)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserWithoutPassword'
+                  count:
+                    type: integer
+                    example: 5
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/auth/login or /api/auth/register
+
+  schemas:
+    RegisterPayload:
+      type: object
+      required:
+        - tenantName
+        - domain
+        - username
+        - email
+        - password
+      properties:
+        tenantName:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Name of the tenant organization
+          example: Acme Corp
+        domain:
+          type: string
+          format: hostname
+          description: Domain name for the tenant
+          example: acme.com
+        username:
+          type: string
+          pattern: '^[a-zA-Z0-9]+$'
+          minLength: 3
+          maxLength: 30
+          description: Admin username (alphanumeric only)
+          example: admin
+        email:
+          type: string
+          format: email
+          description: Admin email address
+          example: admin@acme.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Admin password (minimum 8 characters)
+          example: SecurePass123
+
+    LoginPayload:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: admin@acme.com
+        password:
+          type: string
+          format: password
+          description: User password
+          example: SecurePass123
+        tenantId:
+          type: string
+          format: uuid
+          description: Tenant UUID (either tenantId or domain is required)
+          example: 123e4567-e89b-12d3-a456-426614174000
+        domain:
+          type: string
+          format: hostname
+          description: Tenant domain (either tenantId or domain is required)
+          example: acme.com
+
+    CreateUserPayload:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          pattern: '^[a-zA-Z0-9]+$'
+          minLength: 3
+          maxLength: 30
+          description: Username (alphanumeric only)
+          example: newuser
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: user@acme.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: User password (minimum 8 characters)
+          example: UserPass123
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+          description: User role
+          example: user
+
+    UserWithoutPassword:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        tenantId:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: admin
+        email:
+          type: string
+          format: email
+          example: admin@acme.com
+        role:
+          type: string
+          enum: [admin, user]
+          example: admin
+        status:
+          type: string
+          enum: [active, inactive]
+          example: active
+        createdAt:
+          type: string
+          format: date-time
+          example: 2024-01-01T00:00:00.000Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2024-01-02T00:00:00.000Z
+
+    TenantInfo:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: Acme Corp
+        domain:
+          type: string
+          format: hostname
+          example: acme.com
+
+    Tenant:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: Acme Corp
+        domain:
+          type: string
+          format: hostname
+          example: acme.com
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+          example: active
+        createdAt:
+          type: string
+          format: date-time
+          example: 2024-01-01T00:00:00.000Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2024-01-02T00:00:00.000Z
+        settings:
+          type: object
+          additionalProperties: true
+          example:
+            maxUsers: 100
+            features: [feature1, feature2]
+
+    Error:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Validation failed
+
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            statusCode: 400
+            error: Bad Request
+            message: Validation failed
+
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            noToken:
+              summary: No authentication token provided
+              value:
+                statusCode: 401
+                error: Unauthorized
+                message: Missing authentication
+            invalidToken:
+              summary: Invalid or expired token
+              value:
+                statusCode: 401
+                error: Unauthorized
+                message: Invalid token
+            blacklistedToken:
+              summary: Token has been blacklisted
+              value:
+                statusCode: 401
+                error: Unauthorized
+                message: Token is no longer valid
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            statusCode: 403
+            error: Forbidden
+            message: Insufficient scope
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            statusCode: 500
+            error: Internal Server Error
+            message: An internal server error occurred
