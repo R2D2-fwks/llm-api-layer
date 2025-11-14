@@ -34,7 +34,7 @@ const init = async (): Promise<void> => {
     }
   });
 
-  try:
+  try {
     // Connect to Redis
     logger.info('Connecting to Redis');
     await redisClient.connect();

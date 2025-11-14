@@ -1,6 +1,6 @@
 # LLM API Layer - Multi-Tenant Hapi.js Server
 
-A secure, multi-tenant API server built with Hapi.js framework and TypeScript, featuring JWT authentication and Redis for data persistence.
+A secure, multi-tenant API server built with Hapi.js framework and TypeScript, featuring JWT authentication and Redis for data persistence. Production-ready with Docker and Kubernetes support.
 
 ## Features
 
@@ -14,6 +14,12 @@ A secure, multi-tenant API server built with Hapi.js framework and TypeScript, f
 - 🔄 Session management
 - 🛡️ Token blacklisting for logout
 - 📘 Full TypeScript support with strict type checking
+- 📝 Structured logging with Pino
+- 🐳 Docker containerization
+- ☸️ Kubernetes deployment ready
+- 📊 OpenAPI documentation (Swagger UI)
+- 🔄 Auto-scaling with HPA
+- 🛡️ Production-grade security
 
 ## Prerequisites
 
@@ -56,28 +62,86 @@ redis-server
 
 ## Running the Server
 
-### Development mode (with auto-reload using ts-node-dev):
+### Local Development
+
+#### Development mode (with auto-reload):
 ```bash
 npm run dev
 ```
 
-### Build the project:
+#### Build the project:
 ```bash
 npm run build
 ```
 
-### Production mode:
+#### Production mode:
 ```bash
 npm run build
 npm start
 ```
 
-### Watch mode for development (compile TypeScript on save):
+The server will start on `http://localhost:3000` (or the port specified in your `.env` file).
+
+### Docker
+
+#### Using Docker Compose (Recommended for local development):
 ```bash
-npm run watch
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
 ```
 
-The server will start on `http://localhost:3000` (or the port specified in your `.env` file).
+#### Using Docker directly:
+```bash
+# Build image
+docker build -t llm-api-layer:latest .
+
+# Run container
+docker run -d \
+  -p 3000:3000 \
+  -e REDIS_URL=redis://your-redis-host:6379 \
+  -e JWT_SECRET=your-secret \
+  llm-api-layer:latest
+```
+
+### Kubernetes
+
+#### Quick deploy:
+```bash
+cd k8s
+./deploy.sh
+```
+
+#### Port forward to access locally:
+```bash
+kubectl port-forward -n llm-api-layer svc/llm-api-layer-service 8080:80
+```
+
+See [k8s/README.md](k8s/README.md) for detailed Kubernetes deployment instructions.
+
+### Using Makefile
+
+```bash
+# Show all available commands
+make help
+
+# Quick start with Docker Compose
+make up
+
+# Deploy to Kubernetes
+make k8s-deploy
+
+# View Kubernetes logs
+make k8s-logs
+
+# Run tests
+make test
+```
 
 ## API Endpoints
 
