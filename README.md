@@ -20,6 +20,7 @@ A secure, multi-tenant API server built with Hapi.js framework and TypeScript, f
 - 📊 OpenAPI documentation (Swagger UI)
 - 🔄 Auto-scaling with HPA
 - 🛡️ Production-grade security
+- 🤖 **LLM Integration** - Ollama API wrapper with tenant isolation
 
 ## Prerequisites
 
