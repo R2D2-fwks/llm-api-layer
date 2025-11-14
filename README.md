@@ -224,6 +224,41 @@ Content-Type: application/json
 GET /api/users
 ```
 
+### LLM Endpoints (Ollama Integration)
+
+#### Chat with LLM
+```http
+POST /api/llm/chat
+Authorization: Bearer <your-jwt-token>
+x-tenant-id: <your-tenant-id>
+Content-Type: application/json
+
+{
+  "model": "llama2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the capital of France?"
+    }
+  ],
+  "stream": false
+}
+```
+
+#### List Available Models
+```http
+GET /api/llm/models
+Authorization: Bearer <your-jwt-token>
+x-tenant-id: <your-tenant-id>
+```
+
+#### LLM Health Check
+```http
+GET /api/llm/health
+```
+
+For detailed documentation on LLM endpoints, see [LLM_ENDPOINTS.md](./LLM_ENDPOINTS.md).
+
 ## Architecture
 
 ### Multi-Tenant Design
