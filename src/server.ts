@@ -6,6 +6,7 @@ import redisClient from './config/redis';
 import authPlugin from './plugins/auth';
 import authRoutes from './routes/auth';
 import docsRoutes from './routes/docs';
+import llmRoutes from './routes/llm';
 import tenantService from './services/tenantService';
 import logger from './config/logger';
 
@@ -54,6 +55,7 @@ const init = async (): Promise<void> => {
     // Register routes
     server.route(authRoutes);
     server.route(docsRoutes);
+    server.route(llmRoutes);
 
     // Health check route (no auth required)
     server.route({
@@ -119,6 +121,11 @@ const init = async (): Promise<void> => {
             users: {
               create: 'POST /api/users (admin only)',
               list: 'GET /api/users (admin only)'
+            },
+            llm: {
+              chat: 'POST /api/llm/chat (requires x-tenant-id header)',
+              models: 'GET /api/llm/models (requires x-tenant-id header)',
+              health: 'GET /api/llm/health'
             }
           }
         };

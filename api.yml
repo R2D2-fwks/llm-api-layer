@@ -34,6 +34,8 @@ tags:
     description: User authentication and registration
   - name: Users
     description: User management (admin only)
+  - name: LLM
+    description: LLM chat endpoints (Ollama wrapper)
 
 paths:
   /:
@@ -409,6 +411,176 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/llm/chat:
+    post:
+      summary: Chat with LLM
+      description: Sends a chat message to Ollama LLM. Acts as a wrapper over Ollama's /api/chat endpoint with tenant isolation.
+      tags:
+        - LLM
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Tenant ID that must match the authenticated user's tenant
+          example: 550e8400-e29b-41d4-a716-446655440000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OllamaChatRequest'
+            example:
+              model: llama2
+              messages:
+                - role: user
+                  content: What is the capital of France?
+              stream: false
+      responses:
+        '200':
+          description: Successful LLM response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OllamaChatResponse'
+              example:
+                model: llama2
+                created_at: '2024-01-15T10:30:00Z'
+                message:
+                  role: assistant
+                  content: The capital of France is Paris.
+                done: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Tenant ID mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: Tenant ID mismatch
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          description: Ollama service error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 502
+                error: Bad Gateway
+                message: Ollama service error
+
+  /api/llm/models:
+    get:
+      summary: List available LLM models
+      description: Retrieves a list of all available models from Ollama
+      tags:
+        - LLM
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Tenant ID that must match the authenticated user's tenant
+          example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: List of available models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OllamaModelsResponse'
+              example:
+                models:
+                  - name: llama2
+                    modified_at: '2024-01-15T10:30:00Z'
+                    size: 3826793677
+                  - name: mistral
+                    modified_at: '2024-01-14T09:20:00Z'
+                    size: 4109865159
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Tenant ID mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: Tenant ID mismatch
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          description: Ollama service error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                statusCode: 502
+                error: Bad Gateway
+                message: Ollama service error
+
+  /api/llm/health:
+    get:
+      summary: Check Ollama service health
+      description: Verifies that the Ollama service is available and responding
+      tags:
+        - LLM
+      responses:
+        '200':
+          description: Ollama service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, unhealthy]
+                  timestamp:
+                    type: string
+                    format: date-time
+              example:
+                status: healthy
+                timestamp: '2024-01-15T10:30:00Z'
+        '503':
+          description: Ollama service is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, unhealthy]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  error:
+                    type: string
+              example:
+                status: unhealthy
+                timestamp: '2024-01-15T10:30:00Z'
+                error: Connection refused
+
 components:
   securitySchemes:
     bearerAuth:
@@ -598,6 +770,120 @@ components:
           example:
             maxUsers: 100
             features: [feature1, feature2]
+
+    OllamaMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          description: The role of the message sender
+          example: user
+        content:
+          type: string
+          description: The content of the message
+          example: What is the capital of France?
+
+    OllamaChatRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: The name of the model to use
+          example: llama2
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/OllamaMessage'
+          description: Array of messages in the conversation
+        stream:
+          type: boolean
+          default: false
+          description: Whether to stream the response
+          example: false
+        options:
+          type: object
+          description: Additional model-specific options
+          additionalProperties: true
+
+    OllamaChatResponse:
+      type: object
+      properties:
+        model:
+          type: string
+          description: The model that generated the response
+          example: llama2
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp of when the response was created
+          example: '2024-01-15T10:30:00Z'
+        message:
+          $ref: '#/components/schemas/OllamaMessage'
+        done:
+          type: boolean
+          description: Whether the response is complete
+          example: true
+        total_duration:
+          type: integer
+          description: Total duration in nanoseconds
+          example: 5191566416
+        load_duration:
+          type: integer
+          description: Time spent loading the model
+          example: 2154458
+        prompt_eval_count:
+          type: integer
+          description: Number of tokens in the prompt
+          example: 26
+        prompt_eval_duration:
+          type: integer
+          description: Time spent evaluating the prompt
+          example: 130079000
+        eval_count:
+          type: integer
+          description: Number of tokens in the response
+          example: 259
+        eval_duration:
+          type: integer
+          description: Time spent generating the response
+          example: 5050432000
+
+    OllamaModel:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the model
+          example: llama2
+        modified_at:
+          type: string
+          format: date-time
+          description: When the model was last modified
+          example: '2024-01-15T10:30:00Z'
+        size:
+          type: integer
+          description: Size of the model in bytes
+          example: 3826793677
+        digest:
+          type: string
+          description: SHA256 digest of the model
+          example: sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962
+
+    OllamaModelsResponse:
+      type: object
+      properties:
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/OllamaModel'
+          description: List of available models
 
     Error:
       type: object
